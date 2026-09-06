@@ -1,0 +1,9 @@
+{
+  "name": "@motomoto/extraction",
+  "version": "2.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": { "@motomoto/domain": "workspace:*" },
+  "devDependencies": { "typescript": "^5.8.3" }
+}

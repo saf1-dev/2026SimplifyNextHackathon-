@@ -1,0 +1,13 @@
+{
+  "name": "@motomoto/groq",
+  "version": "2.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@motomoto/domain": "workspace:*",
+    "groq-sdk": "^0.31.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": { "@types/node": "^22.15.0", "typescript": "^5.8.3" }
+}

@@ -1,0 +1,2 @@
+import SearchClient from "./search-client";
+export default function SearchPage() { return <main className="shell search-wrap"><div className="section-head"><div className="eyebrow">Current inventory</div><h1 style={{fontSize:"clamp(46px,6vw,72px)"}}>Describe your next bike.</h1><p className="lead">Try “I want a Class 2A Japanese bike under S$8k with low mileage.”</p></div><SearchClient /></main>; }

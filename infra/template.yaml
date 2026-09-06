@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: MotoMoto.ai V2 hackathon POC (no SSM Parameter Store)
+Parameters:
+  ImageUri:
+    Type: String
+    Description: Immutable ECR image URI including tag or digest
+Resources:
+  MotoMotoTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: motomoto-poc
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: false
+  MotoMotoFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: MotoMotoTableAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Scan, dynamodb:TransactWriteItems]
+                Resource: !GetAtt MotoMotoTable.Arn
+  MotoMotoFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      PackageType: Image
+      Code: { ImageUri: !Ref ImageUri }
+      Role: !GetAtt MotoMotoFunctionRole.Arn
+      MemorySize: 1024
+      Timeout: 30
+      Environment:
+        Variables:
+          MOTOMOTO_REPOSITORY: dynamodb
+          MOTOMOTO_TABLE_NAME: !Ref MotoMotoTable
+          GROQ_MODEL: llama-3.3-70b-versatile
+  MotoMotoFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref MotoMotoFunction
+      AuthType: NONE
+      InvokeMode: BUFFERED
+  MotoMotoFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref MotoMotoFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: '*'
+      FunctionUrlAuthType: NONE
+Outputs:
+  BackendUrl:
+    Value: !GetAtt MotoMotoFunctionUrl.FunctionUrl
+  FunctionName:
+    Value: !Ref MotoMotoFunction
+  TableName:
+    Value: !Ref MotoMotoTable

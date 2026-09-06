@@ -1,0 +1,25 @@
+{
+  "name": "@motomoto/extension",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@motomoto/domain": "workspace:*",
+    "@motomoto/extraction": "workspace:*",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.326",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "esbuild": "^0.25.5",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
