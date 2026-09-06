@@ -1,175 +1,206 @@
-# ThrottleWorth
+# MotoMoto.ai V2
 
-ThrottleWorth is an immediately usable Singapore used-motorcycle discovery and comparable-market valuation MVP. Riders can describe a bike in natural language, combine that request with explicit filters, compare real seller listings, and see the evidence behind each estimated asking-value range.
+MotoMoto.ai is an evidence-led Singapore used-motorcycle intelligence POC. Its primary experience is a Chrome/Edge Manifest V3 side panel that reads one user-opened Carousell or SGBikeMart listing, lets the user verify the extracted facts, then stores and compares the listing only after the user presses **Analyse this bike**.
 
-The included local data file contains 84 unique rows imported from `SG_Motorcycle_Model_Master_2010plus (1).xlsx`. No production listings are synthetic. Missing mileage, COE, ownership, and condition values remain unknown.
+The web product provides the branded landing page and natural-language discovery over current inventory. The supplied 2010+ MotoMoto dataset is migrated as genuine seed evidence; no synthetic motorcycles are used in production.
+
+## What the demo proves
+
+- deterministic marketplace extraction runs before AI;
+- only supported listing fields and sanitized description text are processed;
+- `POST /api/v1/interpret` never writes to storage;
+- `POST /api/v1/analyse` is the explicit ingestion boundary;
+- one stable listing can have many observations but counts once as a comparable;
+- ambiguous legacy prices remain `UNKNOWN` and never become authoritative by assumption;
+- the valuation itself uses deterministic robust statistics—not an LLM;
+- low evidence produces low/insufficient confidence instead of a misleading “great deal” label;
+- Groq is optional for local development and falls back to conservative rules when absent;
+- all secrets stay in backend-only environment configuration.
 
 ## Architecture
 
-- Next.js App Router, TypeScript, React, and Tailwind CSS
-- Groq for structured query interpretation and optional short explanations
-- Deterministic TypeScript logic for comparable search, valuation, confidence, price assessment, and Deal Score
-- A checked-in real-data JSON dataset for the write-free hackathon workload
-- AWS Lambda, Lambda Function URLs, ECR, optional S3, and CloudWatch for deployment
-
-The hackathon deployment reads `src/data/motorcycles.json` directly. This avoids an always-on database, keeps the demo deterministic, and preserves the existing PostgreSQL adapter as an optional post-hackathon path.
-
-## Local setup
-
-Requirements: Node.js 22+ and pnpm.
-
-```bash
-pnpm install
-cp .env.example .env.local
-pnpm dev
+```text
+Carousell / SGBikeMart listing
+        │ user opens MotoMoto side panel
+        ▼
+MV3 extension: deterministic DOM + JSON-LD extraction
+        │ sanitized relevant fields only
+        ▼
+POST /api/v1/interpret ──► Groq (optional interpretation; no pricing, no write)
+        │ reviewed by user
+        ▼
+POST /api/v1/analyse ───► ListingRepository ───► local JSON or DynamoDB
+        │                         │ stable listing + append-only observations
+        ▼                         ▼
+deterministic comparable engine: identity → similarity → freshness → weighted quartiles
+        │
+        ▼
+range + confidence + evidence counts + reason codes + limitations
 ```
 
-Create `.env.local` from `.env.example` and place the Groq key there. Open `http://localhost:3000`. A Groq key is optional for local use; deterministic parsing and all manual filters continue to work without it. Next.js loads `.env.local` itself, so `python-dotenv` is not required.
+The monorepo contains:
 
-Quality checks:
+- `apps/extension`: Chrome/Edge MV3 side panel, service worker and marketplace content script;
+- `apps/web`: Next.js landing/search UI and versioned API routes;
+- `packages/domain`: runtime-validated shared schemas;
+- `packages/extraction`: marketplace detection, canonicalization, sanitization and extractors;
+- `packages/groq`: constrained AI interpretation and natural-language intent parsing;
+- `packages/valuation`: deterministic comparable selection, weighting and confidence gating;
+- `packages/data-access`: repository contract with atomic local JSON and DynamoDB implementations;
+- `data/source`: the supplied source CSV;
+- `scripts`: migration, validation and clean packaging;
+- `infra`: AWS CloudFormation POC resources.
 
-```bash
-pnpm typecheck
+## Local prerequisites
+
+- Node.js 22+
+- pnpm 10 (`corepack enable` is sufficient on standard Node installs)
+- Chrome or Edge 114+
+
+From `C:\Users\salma\Hackathon`:
+
+```powershell
+corepack enable
+pnpm install
+pnpm migrate:data
+pnpm validate:data
 pnpm test
+pnpm typecheck
 pnpm build
 ```
 
-## Environment variables
+Start the local backend/web experience:
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `GROQ_API_KEY` | Natural-language search | Server-only Groq authentication |
-| `AWS_REGION` | AWS deployment | Required hackathon value: `us-east-1` |
-| `MOTORCYCLE_DATA_BUCKET` | Optional | S3 bucket for original workbook snapshots and future model artifacts |
-| `MOTORCYCLE_DATA_PATH` | Optional | Local JSON import output; defaults to `src/data/motorcycles.json` |
-
-For local development, put `GROQ_API_KEY` in `.env.local`. For AWS, configure it only as a Lambda runtime environment variable. Never use a `NEXT_PUBLIC_` prefix, include the key in Docker build arguments, write it into `.env.production`, or commit it to Git. AWS credentials are deployment credentials and must not be placed in the application environment.
-
-## Excel import
-
-The importer locates listing sheets by their headers rather than sheet name. It normalizes `NA`, blanks, dates, numbers, percentages, and duplicate URLs, rejects rows without a usable URL/price/class/model, computes condition only from available evidence, and produces stable IDs.
-
-```bash
-pnpm import:motorcycles -- "./data/SG_Motorcycle_Model_Master_2010plus.xlsx"
+```powershell
+Copy-Item .env.example apps/web/.env.local
+pnpm dev
 ```
 
-With no `DATABASE_URL`, the command refreshes the local JSON data. With `DATABASE_URL`, it also upserts those same verified rows into PostgreSQL and prints an import summary.
+Open `http://localhost:3000`. The app works without Groq: interpretation and search intent parsing use conservative deterministic fallbacks.
 
-## Optional post-hackathon PostgreSQL setup
+### Optional Groq configuration
 
-The production hackathon demo does not require PostgreSQL. If a later deployment needs mutable listing data, create a PostgreSQL database, set `DATABASE_URL`, then run:
+Never paste a key into source, chat, a command argument, or a committed file. On your own machine, open `apps/web/.env.local` in a text editor and enter:
 
-```bash
-pnpm db:migrate
-pnpm import:motorcycles -- "./data/SG_Motorcycle_Model_Master_2010plus.xlsx"
+```dotenv
+GROQ_API_KEY=your_key_entered_locally
 ```
 
-The migration creates `motorcycle_listings`, search indexes, and a data-version-aware `valuation_cache` table for future persistent caching. The current server uses a small process cache keyed by listing ID and dataset version.
+`.env.local` is ignored by Git. The extension contains no key and calls only the MotoMoto backend. If a key has ever been exposed in chat or committed history, revoke it at the provider and create a replacement before use.
 
-## Search and Groq
+## Build and load the extension
 
-`POST /api/search` sends a natural-language query to Groq using strict JSON output and validates the response with Zod. Explicit UI filters override interpreted fields. If Groq is unavailable or returns invalid JSON, the route uses a conservative deterministic parser; it never invents listings or asks an LLM to perform valuation arithmetic.
+The default build permits only the supported marketplaces plus `http://localhost:3000/*`.
 
-Endpoints:
+```powershell
+pnpm build:extension
+```
 
-- `POST /api/search`
-- `GET /api/bikes/:id`
-- `GET /api/bikes/:id/valuation`
-- `GET /api/bikes/:id/comparables`
+Then:
 
-## Comparable search
+1. Open `chrome://extensions` or `edge://extensions`.
+2. Enable Developer mode.
+3. Choose **Load unpacked**.
+4. Select `C:\Users\salma\Hackathon\apps\extension\dist`.
+5. Open an individual Carousell or SGBikeMart motorcycle listing.
+6. Click MotoMoto.ai to open the side panel.
 
-The engine excludes the target listing and begins with brand, model, class, CC, COE, age, mileage, and condition. It progressively relaxes criteria through eight configurable levels, stopping once enough evidence exists. Asking price is deliberately absent from the comparable group ID.
+For a deployed backend, rebuild with its exact origin. This changes only the backend host permission—never use `<all_urls>`.
 
-Similarity weights favor exact model, COE, class, and CC, followed by age, mileage, condition, and brand. Missing values receive a neutral-low contribution rather than an excellent score.
+```powershell
+$env:MOTOMOTO_BACKEND_ORIGIN='https://example.lambda-url.us-east-1.on.aws'
+pnpm build:extension
+```
 
-## Valuation and confidence
+## Agentic AI workflow
 
-The valuation engine:
+The POC uses bounded, auditable orchestration rather than giving an LLM control of storage or pricing:
 
-1. Finds and similarity-ranks comparables.
-2. Removes invalid prices and filters obvious IQR outliers.
-3. Calculates median, weighted mean, lower quartile, and upper quartile.
-4. Uses a median-led robust midpoint and rounds display estimates to S$50.
-5. Compares the seller's asking price only after estimating the comparable-market range.
+1. The extension detects whether the active page is supported.
+2. A user click starts deterministic extraction from structured data, semantic labels, metadata and narrowly selected description content.
+3. Contact information is removed before the description reaches the backend.
+4. The interpretation route asks Groq only for explicitly evidenced maintenance, accident, modification, price-semantic and red-flag facts. Its JSON is schema-validated.
+5. Deterministic evidence remains stronger than AI evidence and every field retains source/confidence/snippet metadata.
+6. The user reviews material fields and confirms the meaning of the displayed price.
+7. Only the analyse click authorizes validation, deduplication, persistence, comparable retrieval and valuation.
+8. The deterministic engine computes the output; the LLM never supplies a number.
 
-Confidence considers comparable count, fallback level, average similarity, missing mileage/COE/age, and evidence completeness. Thresholds and all price/deal weights live in `src/lib/config/valuation.ts`.
+No hidden chain of thought is exposed or persisted. The stored trace consists only of concise action/outcome audit events.
 
-These are estimated market asking values, not confirmed transaction prices, guarantees, or statements of actual sale value.
+## Data and valuation policy
+
+The migration decodes the supplied CSV as Windows-1252, preserves known values and nulls, normalizes dates/statuses, canonicalizes valid URLs, reports invalid URLs and removes only exact duplicate source identities. It creates one migrated listing record per unique source plus migration metadata.
+
+Because the source spreadsheet does not establish whether its amount is a full cash price, downpayment or monthly instalment, every migrated amount is `UNKNOWN`. Those records may support only an explicitly low-confidence indication with an 0.18 reliability multiplier. They cannot contribute to authoritative price statistics. New records must be `FULL_PRICE` or `TOTAL_INSTALLMENT_PRICE` to be authoritative.
+
+The comparable engine uses stable-listing identity, model/brand/class/capacity similarity, COE/age/mileage/condition similarity, source reliability and a 120-day freshness half-life. It returns weighted 25th/50th/75th percentiles. Fewer than two authoritative comparables caps confidence at low; no eligible evidence returns insufficient with no fabricated estimate.
+
+`SOLD` means only that an advertised listing later appeared sold. It is not a transaction price.
+
+## API
+
+### `POST /api/v1/interpret`
+
+Accepts `{ "draft": ExtractedDraft }`. Returns a merged suggestion, provenance, material conflicts, missing critical fields and a short action/outcome trace. It performs no repository call.
+
+### `POST /api/v1/analyse`
+
+Accepts `{ "reviewedDraft": ListingDraft, "aiEvidence": [], "userOverrides": [] }`. It validates, finds exact/possible duplicates, writes the stable listing and observation, then calculates a valuation. Successful ingestion is retained even if comparable evidence is insufficient.
+
+### `GET /api/v1/search?q=...`
+
+Parses hard filters separately from soft preferences and searches only `AVAILABLE`/`RESERVED` current listings. Groq parsing is optional; a deterministic parser handles class, brand, budget, mileage/COE preference and broad usage intent.
 
 ## AWS hackathon deployment
 
-The deployment target is a Lambda container image exposed through a Lambda Function URL. `Dockerfile.lambda` packages the Next.js standalone server with the AWS Lambda Web Adapter. This keeps compute pay-per-use and requires no API Gateway, load balancer, NAT Gateway, RDS instance, App Runner service, or SSM Parameter Store.
+Preferred low-cost POC resources are a Lambda container behind a Function URL, one DynamoDB on-demand table, ECR and CloudWatch Logs. No NAT Gateway, RDS, EC2, OpenSearch or SSM Parameter Store is required. The project keeps working locally if organization policies block any AWS step.
 
-AWS resources:
-
-- One private ECR repository for the application image
-- One Lambda function with a Function URL
-- The Lambda-created CloudWatch log group
-- Optionally one private, encrypted S3 bucket for the original workbook snapshot
-
-Use `us-east-1` for every resource. The application uses the embedded 84-row real dataset at runtime, so `DATABASE_URL` must remain unset for the hackathon deployment.
-
-### 1. Authenticate safely
-
-Load the temporary hackathon credentials into a named AWS CLI profile called `ignite`. Never add AWS credentials to `.env.local` or the Lambda environment.
+The CloudFormation template creates the Lambda, least-purpose execution role, Function URL and on-demand table. Build/push the image using the hackathon guide and deploy:
 
 ```powershell
-aws sts get-caller-identity --profile ignite --region us-east-1
+aws cloudformation deploy `
+  --stack-name motomoto-v2 `
+  --template-file infra/template.yaml `
+  --capabilities CAPABILITY_NAMED_IAM `
+  --parameter-overrides ImageUri=ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/motomoto-v2:TAG
 ```
 
-### 2. Build and push the Lambda image
+Do not put temporary AWS credentials in `.env.local`, source files, Git, screenshots, shell scripts or deployment parameters. Configure the AWS CLI through the hackathon login flow; session credentials expire and are needed only by the person deploying, not by an already-running Lambda.
 
-Create an ECR repository named `motomoto-ai`, authenticate Docker to the repository, then build `Dockerfile.lambda` and push its `latest` tag. The Lambda Web Adapter image is pinned to version `1.0.1`.
+SSM Parameter Store is intentionally absent. After deployment, enter `GROQ_API_KEY` yourself using the Lambda console’s encrypted environment-variable configuration (or an approved deployment-platform secret UI). Never send the value to the browser extension. The key does not expire with AWS session credentials; rotate it independently if revoked or exposed.
+
+After obtaining the Function URL, rebuild the extension with that exact `MOTOMOTO_BACKEND_ORIGIN` and reload the unpacked extension. Review AWS Billing/Cost Explorer and delete the stack/ECR images after the event if no longer needed.
+
+## Tests and verification
+
+`pnpm test` covers sanitizer/canonical URL behavior, SGBikeMart deterministic extraction, stable-listing deduplication, append-only observations, robust valuation, low-confidence legacy gating and no-comparable behavior. `pnpm typecheck` checks every workspace package; `pnpm build` builds the extension and production Next.js app.
+
+Manual browser checks should cover:
+
+- landing page at desktop and narrow viewport;
+- natural-language search with and without results;
+- extension unsupported state;
+- extraction/review/clarification/progress/result states;
+- one current individual listing on each supported marketplace when publicly accessible;
+- no write after interpretation and exactly one observation after analysis;
+- extension bundle secret scan.
+
+## 2–3 minute judge demo
+
+1. **0:00–0:20 — Problem.** Explain that Singapore used-bike ads mix full prices, deposits and instalments, while condition and COE evidence is inconsistent.
+2. **0:20–0:35 — Product.** Show the landing page and explain the Browse → Analyse → Compare → Negotiate informed loop.
+3. **0:35–1:15 — Extension.** Open a supported listing, launch the side panel and press **Extract listing**. Point out deterministic field count, provenance and the explicit full-price clarification.
+4. **1:15–1:50 — Agentic boundary.** Explain that Groq interprets only sanitized evidence, cannot write, and never calculates price. Confirm the reviewed price meaning and press **Analyse this bike**.
+5. **1:50–2:20 — Trust.** Show independent comparable count, range, confidence and limitation reason codes. If evidence is insufficient, emphasize that refusal is an intentional safety outcome.
+6. **2:20–2:45 — Flywheel.** Explain stable listing identity and append-only observations: every authorized analysis improves future evidence without duplicate inflation.
+7. **2:45–3:00 — Search/AWS.** Search in natural language, then show the serverless Lambda + DynamoDB architecture and no-secret extension.
+
+## Submission and security
+
+Create a clean archive (excluding Git metadata, dependencies, build caches, secrets and runtime data):
 
 ```powershell
-docker build -f Dockerfile.lambda -t motomoto-ai:latest .
+pnpm clean:submission
 ```
 
-The exact ECR login and tag commands depend on the leased AWS account ID; retrieve it with `aws sts get-caller-identity` rather than placing an account ID in source control.
-
-### 3. Create the Lambda function
-
-Create a container-image Lambda function named `motomoto-ai` using the ECR image. Recommended demo settings:
-
-- Architecture: `x86_64`
-- Memory: 1,024 MB
-- Timeout: 30 seconds
-- Reserved concurrency: leave unset
-- Function URL authentication: `NONE` for the public demo
-- Region: `us-east-1`
-
-Use a minimal execution role with `AWSLambdaBasicExecutionRole`; no VPC access is required. Lambda sends stdout and stderr to CloudWatch automatically.
-
-### 4. Configure the Groq key
-
-In the Lambda console, open **Configuration > Environment variables** and add:
-
-```text
-GROQ_API_KEY=<rotated key>
-```
-
-Use Lambda's platform configuration rather than source files, Docker build arguments, deployment manifests, SSM Parameter Store, or GitHub. Lambda encrypts runtime environment variables at rest with an AWS-managed KMS key by default. Do not place the key in a CLI command because shell history and process listings can expose it.
-
-After changing the key, publish the configuration and run one natural-language search through the Function URL. If Groq is unavailable, manual filters and deterministic fallback parsing continue to work.
-
-### 5. Optional S3 source archive
-
-If desired for the architecture demonstration, create a private bucket with Block Public Access and default encryption enabled, then upload the original workbook. The running application does not need permission to read this bucket; it is provenance/archive storage only.
-
-### Cost controls
-
-- Keep only one Lambda function and one ECR image tag.
-- Do not enable provisioned concurrency.
-- Do not create RDS, EC2, App Runner, NAT Gateways, load balancers, OpenSearch, or SageMaker endpoints.
-- Do not add a customer-managed KMS key; the Lambda-managed key avoids an extra KMS resource and charge.
-- Monitor the hackathon budget indicator because account access is revoked at the event's effective limit.
-- Remove the Lambda function, ECR images, and optional S3 bucket after judging if the sandbox is not automatically reclaimed.
-
-## Known limitations and roadmap
-
-- Source data contains asking prices, not completed transactions.
-- Some motorcycles have sparse mileage, COE, or condition evidence; the UI surfaces this as lower confidence.
-- Small model-level samples can require broad comparable fallback.
-- No live scraping, accounts, alerts, or production admin tools are included.
-- A future `predictMLValue(listing)` adapter can add CatBoost, LightGBM, or XGBoost as a second signal. Model artifacts should live in S3, but comparable evidence should remain visible and independently auditable.
+See [SECURITY.md](SECURITY.md) for handling and incident guidance. MotoMoto estimates advertised asking-price evidence only and does not replace inspection, financing verification, legal checks or professional advice.

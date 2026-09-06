@@ -1,0 +1,25 @@
+{
+  "name": "@motomoto/web",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@motomoto/data-access": "workspace:*",
+    "@motomoto/domain": "workspace:*",
+    "@motomoto/groq": "workspace:*",
+    "@motomoto/valuation": "workspace:*",
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0"
+  }
+}

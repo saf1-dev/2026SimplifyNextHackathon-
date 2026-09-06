@@ -1,7 +1,0 @@
-node_modules
-.next
-.git
-work
-outputs
-.env*
-*.xlsx

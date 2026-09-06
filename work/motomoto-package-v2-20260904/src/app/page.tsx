@@ -1,5 +1,0 @@
-import { SearchExperience } from "@/components/SearchExperience";
-
-export default function Home() {
-  return <><SearchExperience/><section className="method" id="how-it-works"><p className="kicker dark"><span/> Clear by design</p><h2>From a sentence to a stronger negotiation.</h2><div className="steps"><article><b>01</b><h3>Tell us what matters</h3><p>Use natural language, filters, or both. Explicit filters always win.</p></article><article><b>02</b><h3>Compare the market</h3><p>We progressively find relevant listings, excluding the bike being valued.</p></article><article><b>03</b><h3>See the evidence</h3><p>Review the estimated range, confidence, fallback level, and exact comparables.</p></article></div></section><section className="method-note" id="method"><div><p className="kicker"><span/> Honest estimates</p><h2>We value the evidence.<br/>Not the sales pitch.</h2></div><p>Every estimate comes from similar asking-price listings. Mileage, age, COE, condition and model similarity shape the comparison. Missing details reduce confidence instead of looking artificially positive.</p></section></>;
-}

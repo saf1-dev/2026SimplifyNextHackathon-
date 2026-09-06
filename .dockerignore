@@ -1,7 +1,11 @@
 node_modules
 .next
 .git
-work
-outputs
+.git-v2
+.runtime
 .env*
-*.xlsx
+coverage
+tests
+submission
+apps/extension
+*.csv

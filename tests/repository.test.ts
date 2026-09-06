@@ -1,0 +1,9 @@
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { JsonListingRepository } from "@motomoto/data-access";
+import { ListingDraftSchema } from "@motomoto/domain";
+
+const draft=ListingDraftSchema.parse({marketplace:"CAROUSELL",sourceListingId:"123456789",originalUrl:"https://carousell.sg/p/bike-123456789",canonicalUrl:"https://carousell.sg/p/bike-123456789",listingStatus:"AVAILABLE",brand:"Honda",model:"CB400X",engineCc:399,engineClass:"2A",askingPriceSgd:6500,priceType:"FULL_PRICE",mileageKm:22000,registrationDate:null,ageYears:null,coeExpiry:null,coeRemainingYears:null,roadTaxExpiry:null,numberOfOwners:null,location:null,paymentOption:null,sellerType:"UNKNOWN",maintenanceSummary:null,accidentDisclosure:null,modifications:null,modificationImpact:"UNKNOWN",descriptionText:"Well maintained",redFlags:[],conditionEvidence:[],conditionScore:null,conditionGroup:"COND-NA",capturedAt:"2026-09-06T00:00:00.000Z",extractionEvidence:[],dataQualityFlags:[],ingestionSource:"TEST"});
+describe("local repository",()=>{it("stores atomically and adds observations without duplicate listings",async()=>{const dir=await mkdtemp(join(tmpdir(),"motomoto-"));const path=join(dir,"store.json");const repo=new JsonListingRepository(path);const one=await repo.save({reviewedDraft:draft,aiEvidence:[],userOverrides:[]});const two=await repo.save({reviewedDraft:{...draft,capturedAt:"2026-09-06T01:00:00.000Z",askingPriceSgd:6300},aiEvidence:[],userOverrides:[]});expect(one.duplicateResult).toBe("NEW_LISTING");expect(two.duplicateResult).toBe("EXACT_DUPLICATE");expect(await repo.list()).toHaveLength(1);expect(JSON.parse(await readFile(path,"utf8")).observations).toHaveLength(2);});});
